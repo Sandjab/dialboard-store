@@ -1,0 +1,30 @@
+name: build-index
+on:
+  pull_request:
+    paths: ['entries/**', 'schema/**', 'build-index.mjs', 'vendor/**']
+  push:
+    branches: [main]
+    paths: ['entries/**', 'schema/**', 'build-index.mjs', 'vendor/**']
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: node build-index.mjs --check
+  build:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: node build-index.mjs
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.json
+          git diff --staged --quiet || (git commit -m "chore: regenere index.json [skip ci]" && git push)
