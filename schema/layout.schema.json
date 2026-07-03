@@ -1,0 +1,631 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "rich-telemetry/layout.schema.json",
+  "title": "Dialboard layout",
+  "description": "Contrat partage du layout.json entre le firmware embarque (consommateur, src/dashboard.cpp) et le designer WYSIWYG (producteur, designer/). SOURCE DE VERITE UNIQUE. Derive du parser dash_set_layout() + du README. Le firmware est tolerant (il ignore les cles inconnues) ; ce schema est volontairement plus strict (additionalProperties:false) pour que le designer attrape les fautes de frappe. Toute evolution du contrat = un commit dedie ici, merge sur master, puis rebase des branches embarque/designer.",
+  "type": "object",
+  "required": ["components", "pages"],
+  "additionalProperties": false,
+  "properties": {
+    "title": { "$ref": "#/$defs/display", "description": "Titre du dashboard (defaut \"\")." },
+    "background": { "$ref": "#/$defs/hexColor", "description": "Couleur de fond (defaut #000000)." },
+    "nav": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wrap": { "type": "boolean", "description": "Navigation circulaire (derniere page -> premiere). Defaut true." }
+      }
+    },
+    "tz": { "type": "string", "description": "Fuseau POSIX (configTzTime) pour le composant clock. Defaut \"UTC0\". Ex. \"CET-1CEST,M3.5.0,M10.5.0\" (Paris)." },
+    "components": {
+      "type": "object",
+      "description": "Map id -> definition. AUCUNE position ici (la position vit dans pages[].place[]). Un meme id place sur plusieurs pages = un seul exemplaire, etat partage.",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/component" }
+    },
+    "pages": {
+      "type": "array",
+      "description": "Liste ordonnee de pages.",
+      "items": { "$ref": "#/$defs/page" }
+    },
+    "sources": {
+      "type": "array",
+      "description": "Pull reseau (P2/P3). Chaque source fetch son url a son interval et ecrit ses vars dans le contexte ; un composant bind:\"var\" lit la valeur. SECRETS NON inclus ici : poses via POST /secrets (write-only), references par $nom dans headers.",
+      "maxItems": 6,
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "sinks": {
+      "type": "array",
+      "description": "Push reseau reactif (miroir de sources). Chaque sink observe une var et POST/PUT/GET son url quand une ecriture d'ORIGINE UI (effecteur) la modifie. Debounce de traine via debounce_ms. SECRETS via $nom dans headers.",
+      "maxItems": 6,
+      "items": { "$ref": "#/$defs/sink" }
+    }
+  },
+  "$defs": {
+    "hexColor": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$",
+      "description": "Couleur #RRGGBB."
+    },
+    "ascii": {
+      "type": "string",
+      "pattern": "^[\\x00-\\x7F]*$",
+      "description": "Cle de contenu (hash d'asset) : ASCII pur. Utilisee par background_image et les src d'image/animation. (Le texte d'affichage a migre vers $defs/display, Latin-1.)"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]+$",
+      "minLength": 1,
+      "description": "Identifiant (poignee de reference) : lettres ASCII, chiffres, underscore. Jamais traduit."
+    },
+    "display": {
+      "type": "string",
+      "pattern": "^[\\x20-\\x7E\\xA0-\\xFF]*$",
+      "description": "Texte affiche sur le device : Latin-1 (ce que les fontes embarquees rendent ; cf. tools/gen_fonts.py)."
+    },
+    "font": {
+      "type": "integer",
+      "minimum": 8,
+      "maximum": 120,
+      "description": "Taille de police en px. Rendu Tiny TTF (taille exacte, pas d'arrondi). Defaut 20."
+    },
+    "fontFamily": {
+      "enum": ["montserrat", "jetbrains_mono", "lora", "inter"],
+      "description": "Famille de caracteres (rendu Tiny TTF). Defaut montserrat."
+    },
+    "threshold": {
+      "type": "array",
+      "description": "[limite, \"#hex\"] : la couleur s'applique quand la valeur passe SOUS la limite.",
+      "items": [
+        { "type": "number" },
+        { "$ref": "#/$defs/hexColor" }
+      ],
+      "minItems": 2,
+      "maxItems": 2,
+      "additionalItems": false
+    },
+    "anchor": {
+      "enum": [
+        "CENTER",
+        "TOP_MID", "BOTTOM_MID", "LEFT_MID", "RIGHT_MID",
+        "TOP_LEFT", "TOP_RIGHT", "BOTTOM_LEFT", "BOTTOM_RIGHT"
+      ],
+      "description": "Ancrage LVGL du placement. Defaut CENTER. (parse_anchor, dashboard.cpp)"
+    },
+    "anchorOut": {
+      "enum": [
+        "TOP_LEFT", "TOP_MID", "TOP_RIGHT",
+        "LEFT_MID", "RIGHT_MID",
+        "BOTTOM_LEFT", "BOTTOM_MID", "BOTTOM_RIGHT"
+      ],
+      "description": "Position d'un libelle autour de son widget (LV_ALIGN_OUT_*). Les 8 bords/coins exterieurs, sans CENTER."
+    },
+    "component": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        { "$ref": "#/$defs/comp_label" },
+        { "$ref": "#/$defs/comp_readout" },
+        { "$ref": "#/$defs/comp_bar" },
+        { "$ref": "#/$defs/comp_ring" },
+        { "$ref": "#/$defs/comp_led_ring" },
+        { "$ref": "#/$defs/comp_sound" },
+        { "$ref": "#/$defs/comp_chart" },
+        { "$ref": "#/$defs/comp_meter" },
+        { "$ref": "#/$defs/comp_image" },
+        { "$ref": "#/$defs/comp_image_anim" },
+        { "$ref": "#/$defs/comp_led" },
+        { "$ref": "#/$defs/comp_rect" },
+        { "$ref": "#/$defs/comp_circle" },
+        { "$ref": "#/$defs/comp_line" },
+        { "$ref": "#/$defs/comp_icon" },
+        { "$ref": "#/$defs/comp_switch" },
+        { "$ref": "#/$defs/comp_button" },
+        { "$ref": "#/$defs/comp_slider" },
+        { "$ref": "#/$defs/comp_arc" },
+        { "$ref": "#/$defs/comp_roller" },
+        { "$ref": "#/$defs/comp_stepper" },
+        { "$ref": "#/$defs/comp_segmented" },
+        { "$ref": "#/$defs/comp_clock" },
+        { "$ref": "#/$defs/comp_rings" },
+        { "$ref": "#/$defs/comp_qr" }
+      ]
+    },
+    "comp_label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "label" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN au rendu). Revelable a chaud via /update {\"<id>\":{\"visible\":true}}." },
+        "bind": { "$ref": "#/$defs/id", "description": "Nom d'une variable du contexte (pull). Present = lit la variable au lieu d'etre pousse par id. Absent = push par id (defaut)." },
+        "text": { "$ref": "#/$defs/display", "description": "Texte statique (peut etre remplace via /update avec une string)." },
+        "font": { "$ref": "#/$defs/font" },
+        "font_family": { "$ref": "#/$defs/fontFamily" },
+        "bold": { "type": "boolean", "description": "Gras (vrai cut). Defaut false." },
+        "italic": { "type": "boolean", "description": "Italique (vrai cut). Defaut false." },
+        "color": { "$ref": "#/$defs/hexColor" },
+        "fill": { "$ref": "#/$defs/hexColor", "description": "Couleur de fond (bg_color) derriere le texte. Absent = pas de fond (transparent). Rayon de coin via placement.radius." },
+        "border_color": { "$ref": "#/$defs/hexColor", "description": "Couleur du contour. Ignorée si border_width 0. Defaut #FFFFFF." },
+        "border_width": { "type": "integer", "minimum": 0, "description": "Épaisseur du contour en px. 0 = pas de contour. Defaut 0." },
+        "pad_x": { "type": "integer", "minimum": 0, "description": "Marge interne horizontale (pad_hor) entre le texte et le bord du fond/contour, en px. Defaut 0." },
+        "pad_y": { "type": "integer", "minimum": 0, "description": "Marge interne verticale (pad_ver) entre le texte et le bord du fond/contour, en px. Defaut 0." }
+      }
+    },
+    "comp_readout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "readout" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN au rendu). Revelable a chaud via /update {\"<id>\":{\"visible\":true}}." },
+        "bind": { "$ref": "#/$defs/id", "description": "Nom d'une variable du contexte (pull). Present = lit la variable au lieu d'etre pousse par id. Absent = push par id (defaut)." },
+        "label": { "$ref": "#/$defs/display", "description": "Libelle affiche devant la valeur (ex. \"CPU\")." },
+        "unit": { "$ref": "#/$defs/display", "description": "Unite affichee apres la valeur (%, GB, °C, Mbps)." },
+        "font": { "$ref": "#/$defs/font" },
+        "font_family": { "$ref": "#/$defs/fontFamily" },
+        "bold": { "type": "boolean", "description": "Gras (vrai cut). Defaut false." },
+        "italic": { "type": "boolean", "description": "Italique (vrai cut). Defaut false." },
+        "color": { "$ref": "#/$defs/hexColor" }
+      }
+    },
+    "comp_bar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "bar" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN au rendu). Revelable a chaud via /update {\"<id>\":{\"visible\":true}}." },
+        "bind": { "$ref": "#/$defs/id", "description": "Nom d'une variable du contexte (pull). Present = lit la variable au lieu d'etre pousse par id. Absent = push par id (defaut)." },
+        "label": { "$ref": "#/$defs/display", "description": "Libelle affiche au-dessus de la barre." },
+        "min": { "type": "number", "description": "Defaut 0." },
+        "max": { "type": "number", "description": "Defaut 100." },
+        "color": { "$ref": "#/$defs/hexColor" },
+        "label_color": { "$ref": "#/$defs/hexColor", "description": "Couleur du libelle. Defaut #9AA0AA." },
+        "label_font": { "$ref": "#/$defs/font", "description": "Taille de police du libelle. Defaut 14." },
+        "label_family": { "$ref": "#/$defs/fontFamily", "description": "Famille du libelle. Defaut montserrat." },
+        "label_bold": { "type": "boolean", "description": "Libelle en gras. Defaut false." },
+        "label_italic": { "type": "boolean", "description": "Libelle en italique. Defaut false." },
+        "label_align": { "$ref": "#/$defs/anchorOut", "description": "Position du libelle autour de la barre. Defaut TOP_MID." },
+        "thresholds": { "type": "array", "items": { "$ref": "#/$defs/threshold" }, "description": "Couleur de l'indicateur quand la valeur passe sous une limite (comme le ring). Vide = couleur unie." },
+        "mode": { "enum": ["normal", "symmetrical"], "description": "normal = remplit depuis le bord ; symmetrical = depuis 0 (min negatif requis). Defaut normal. (lv_bar_set_mode)" },
+        "orientation": { "enum": ["horizontal", "vertical"], "description": "Sens de la barre. Defaut horizontal. (lv_bar_set_orientation)" },
+        "anim_ms": { "type": "integer", "minimum": 0, "description": "Duree (ms) d'animation de la valeur a chaque maj. Defaut 0 = instantane." }
+      }
+    },
+    "comp_ring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "ring" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN au rendu). Revelable a chaud via /update {\"<id>\":{\"visible\":true}}." },
+        "bind": { "$ref": "#/$defs/id", "description": "Nom d'une variable du contexte (pull). Present = lit la variable au lieu d'etre pousse par id. Absent = push par id (defaut)." },
+        "color": { "$ref": "#/$defs/hexColor" },
+        "font": { "$ref": "#/$defs/font", "description": "Taille du chiffre central (center_pct)." },
+        "font_family": { "$ref": "#/$defs/fontFamily" },
+        "bold": { "type": "boolean", "description": "Gras (vrai cut). Defaut false." },
+        "italic": { "type": "boolean", "description": "Italique (vrai cut). Defaut false." },
+        "countdown": { "type": "boolean", "description": "Decremente reset_in_s d'une unite/s et l'affiche dans l'ouverture." },
+        "min": { "type": "number", "description": "Defaut 0." },
+        "max": { "type": "number", "description": "Defaut 100." },
+        "thresholds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/threshold" }
+        },
+        "center_pct": { "type": "boolean", "description": "Affiche value+unit au centre de l'anneau, en grand (police = font du composant). La couleur suit le seuil par defaut. Unites non-ASCII (degre, micro) non rendues." },
+        "center_color": { "$ref": "#/$defs/hexColor", "description": "Couleur du chiffre central (center_pct). Surcharge la couleur deduite du seuil. Absent = suit le seuil (ou color)." },
+        "cap_prefix": { "$ref": "#/$defs/display", "description": "Préfixe statique de la légende courbe (texte courbe = cap_prefix + caption). Latin-1, défaut \"\"." },
+        "cap_font": { "$ref": "#/$defs/font", "description": "Taille de police de la légende courbe (cap). Defaut 14." },
+        "cap_family": { "$ref": "#/$defs/fontFamily", "description": "Famille de police de la légende courbe. Defaut montserrat." },
+        "cap_bold": { "type": "boolean", "description": "Légende courbe en gras (vrai cut). Defaut false." },
+        "cap_italic": { "type": "boolean", "description": "Légende courbe en italique (vrai cut). Defaut false." },
+        "mode": { "enum": ["normal", "symmetrical", "reverse"], "description": "Sens de remplissage de l'indicateur. normal = horaire ; reverse = anti-horaire ; symmetrical = depuis le milieu. Defaut normal. (lv_arc_set_mode)" },
+        "rounded": { "type": "boolean", "description": "Extremites de l'indicateur arrondies. Defaut true (rendu actuel). (style arc_rounded)" }
+      }
+    },
+    "comp_led_ring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "led_ring" },
+        "color": { "$ref": "#/$defs/hexColor", "description": "Couleur par defaut." },
+        "brightness": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Luminosite par defaut (defaut 64). Anneau physique 13x WS2812." },
+        "mode": { "enum": ["off", "solid", "progress", "spinner", "blink", "breathe"], "description": "Mode de boot (defaut off). Surchargeable a chaud via /update." },
+        "period_ms": { "type": "integer", "minimum": 100, "maximum": 10000, "description": "Periode d'animation (spinner/blink/breathe), ms. Defaut 1000." }
+      }
+    },
+    "comp_sound": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "sound" }
+      },
+      "description": "Buzzer physique, tir unique. Pas de geometrie. Declenche via /update : {\"tone\":Hz,\"ms\":N} ou {\"name\":\"ok|alert|error\"}."
+    },
+    "comp_chart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Graphe d'historique (lv_chart LINE). L'historique vit dans le device ; /update pousse un scalaire (append). Place via width/height/anchor/dx/dy.",
+      "properties": {
+        "type": { "const": "chart" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN au rendu). Revelable a chaud via /update {\"<id>\":{\"visible\":true}}." },
+        "bind": { "$ref": "#/$defs/id", "description": "Nom d'une variable du contexte (pull). Present = lit la variable au lieu d'etre pousse par id." },
+        "color": { "$ref": "#/$defs/hexColor", "description": "Couleur de la serie." },
+        "min": { "type": "number", "description": "Borne basse de l'axe Y. Defaut 0." },
+        "max": { "type": "number", "description": "Borne haute de l'axe Y. Defaut 100." },
+        "points": { "type": "integer", "minimum": 1, "maximum": 60, "description": "Longueur de la fenetre d'historique. Defaut 30, borne CHART_MAX_POINTS=60." }
+      }
+    },
+    "comp_meter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Jauge analogique a aiguille (lv_meter, arc 270°). thresholds reutilises en zones d'arc colorees (bande (prev, limite]). Place via width/height/anchor/dx/dy.",
+      "properties": {
+        "type": { "const": "meter" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN au rendu). Revelable a chaud via /update {\"<id>\":{\"visible\":true}}." },
+        "bind": { "$ref": "#/$defs/id", "description": "Nom d'une variable du contexte (pull). Present = lit la variable au lieu d'etre pousse par id." },
+        "color": { "$ref": "#/$defs/hexColor", "description": "Couleur de l'aiguille." },
+        "min": { "type": "number", "description": "Borne basse de l'echelle. Defaut 0." },
+        "max": { "type": "number", "description": "Borne haute de l'echelle. Defaut 100." },
+        "thresholds": {
+          "type": "array",
+          "description": "Zones d'arc colorees : chaque [limite, \"#hex\"] colore la bande de la limite precedente (vmin au depart) jusqu'a limite.",
+          "items": { "$ref": "#/$defs/threshold" }
+        }
+      }
+    },
+    "comp_image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Image bitmap statique RGB565A8 (alpha). Rasterisee par le navigateur a w×h exacts (etirement libre), uploadee via POST /image?key=. La taille vit sur le composant (couplee a l'asset : LVGL 8 ne sait pas etirer un lv_img non-uniformement). Le placement ne porte que la position.",
+      "properties": {
+        "type": { "const": "image" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN au rendu). Revelable a chaud via /update {\"<id>\":{\"visible\":true}}." },
+        "src": { "$ref": "#/$defs/ascii", "description": "Cle d'asset (hash FNV-1a du contenu RGB565A8). Absente tant qu'aucune image n'est choisie." },
+        "w": { "type": "integer", "minimum": 1, "maximum": 360, "description": "Largeur en pixels (= largeur de l'asset). Defaut 120." },
+        "h": { "type": "integer", "minimum": 1, "maximum": 360, "description": "Hauteur en pixels (= hauteur de l'asset). Defaut 120." }
+      }
+    },
+    "comp_image_anim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Image animee : pack RGB565A8 multi-frames (N frames brutes concatenees), rasterise par le navigateur a w×h, uploade via POST /aimg?key=. Runtime via /update : {\"frame\":K} | {\"play\":true,\"loop\":L,\"period\":ms} | {\"stop\":true}. bind = frame d'etat au repos (clamp 0..frames-1). Place via anchor/dx/dy.",
+      "properties": {
+        "type": { "const": "image_anim" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN au rendu). Revelable a chaud via /update {\"<id>\":{\"visible\":true}}." },
+        "src": { "$ref": "#/$defs/ascii", "description": "Cle d'asset (hash FNV-1a du pack). Absente tant qu'aucune animation n'est choisie." },
+        "w": { "type": "integer", "minimum": 1, "maximum": 360, "description": "Largeur d'une frame (px) = largeur de l'asset." },
+        "h": { "type": "integer", "minimum": 1, "maximum": 360, "description": "Hauteur d'une frame (px) = hauteur de l'asset." },
+        "frames": { "type": "integer", "minimum": 1, "maximum": 32, "description": "Nombre de frames du pack. Borne AIMG_MAX_FRAMES=32." },
+        "period": { "type": "integer", "minimum": 1, "description": "Temps inter-frame par defaut (ms). Defaut 100. Surchargable via /update." },
+        "rest_frame": { "type": "integer", "minimum": 0, "description": "Frame affichee au repos / apres un play fini. Defaut 0." },
+        "loop": { "type": "integer", "minimum": 0, "description": "Nb de passes par defaut d'un play. 0 = infini (jusqu'a stop). Defaut 0." },
+        "autoplay": { "type": "boolean", "description": "Demarre la lecture au chargement de la page. Defaut false." },
+        "bind": { "$ref": "#/$defs/id", "description": "Variable du contexte (pull) : selectionne la frame d'etat (clamp 0..frames-1) quand l'anim est a l'arret." }
+      }
+    },
+    "comp_led": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Voyant lumineux (lv_led). value < off_below = eteint, sinon allume. Couleur allumee = threshold_color(value) sinon color. Place via anchor/dx/dy + size (diametre).",
+      "properties": {
+        "type": { "const": "led" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN au rendu). Revelable a chaud via /update {\"<id>\":{\"visible\":true}}." },
+        "bind": { "$ref": "#/$defs/id", "description": "Nom d'une variable du contexte (pull). Present = lit la variable au lieu d'etre pousse par id. Absent = push par id (defaut)." },
+        "color": { "$ref": "#/$defs/hexColor", "description": "Couleur allumee quand aucun seuil ne matche. Defaut #22C55E." },
+        "off_below": { "type": "integer", "description": "value < off_below = eteint ; sinon allume. Defaut 1 (0 = eteint, >=1 = allume)." },
+        "thresholds": {
+          "type": "array",
+          "description": "Couleur allumee selon la valeur (1er seuil ou value < limite, sinon color).",
+          "items": { "$ref": "#/$defs/threshold" }
+        },
+        "glow": { "type": "boolean", "description": "Halo externe a l'allumage. Defaut true." },
+        "bezel": { "type": "boolean", "description": "Anneau encastre (boitier). Defaut true." },
+        "specular": { "type": "boolean", "description": "Reflet speculaire (point brillant). Defaut true." },
+        "off_glass": { "type": "boolean", "description": "Garder un faible reflet de verre quand eteint (sous-option de specular). Defaut true." }
+      }
+    },
+    "symbolName": {
+      "enum": ["wifi", "bluetooth", "gps", "usb", "battery_empty", "battery_1", "battery_2", "battery_3", "battery_full", "charge", "power", "bell", "warning", "ok", "close", "play", "pause", "stop", "volume_max", "mute", "home", "settings", "refresh"],
+      "description": "Nom de symbole LVGL (LV_SYMBOL_*). Firmware: glyphe ; designer: SVG equivalent (parite best-effort)."
+    },
+    "icon_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at"],
+      "description": "Bande d'etat : 1re bande ou value < at gagne. symbol/color omis = retombe sur la base.",
+      "properties": {
+        "at": { "type": "number", "description": "Borne haute exclusive : bande choisie si value < at." },
+        "symbol": { "$ref": "#/$defs/symbolName", "description": "Glyphe de la bande. Omis = symbol de base." },
+        "color": { "$ref": "#/$defs/hexColor", "description": "Couleur de la bande. Omis = color de base." }
+      }
+    },
+    "comp_icon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Icone/symbole (lv_label en police de symboles). Glyphe ET couleur pilotes par la valeur poussee (push par id ou bind) via une table d'etats. Place via anchor/dx/dy ; taille = font (defaut 28).",
+      "properties": {
+        "type": { "const": "icon" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN). Pilotable via /update {\"<id>\":{\"visible\":true}}." },
+        "bind": { "$ref": "#/$defs/id", "description": "Nom d'une variable du contexte (pull). Present = lit la variable au lieu d'etre pousse par id. Absent = push par id (defaut)." },
+        "symbol": { "$ref": "#/$defs/symbolName", "description": "Glyphe de base (quand aucune bande de states ne matche). Defaut bell." },
+        "color": { "$ref": "#/$defs/hexColor", "description": "Couleur de base (text_color). Defaut #FFFFFF." },
+        "font": { "$ref": "#/$defs/font", "description": "Taille du glyphe. Defaut 28." },
+        "states": { "type": "array", "items": { "$ref": "#/$defs/icon_state" }, "description": "Table d'etats (glyphe/couleur selon la valeur). Vide = icone statique." }
+      }
+    },
+    "comp_rect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Rectangle décoratif (lv_obj stylé). Aucune donnée. Géométrie sur le placement : width/height + radius (rayon de coin). Le contour est toujours plein (LVGL ne pointille pas les bordures d'objet).",
+      "properties": {
+        "type": { "const": "rect" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN). Pilotable via /update {\"<id>\":{\"visible\":true}}." },
+        "fill": { "$ref": "#/$defs/hexColor", "description": "Couleur de fond (bg_color). Absent = pas de fond (contour seul)." },
+        "border_color": { "$ref": "#/$defs/hexColor", "description": "Couleur du contour (border_color). Ignorée si border_width 0. Defaut #FFFFFF." },
+        "border_width": { "type": "integer", "minimum": 0, "description": "Épaisseur du contour en px. 0 = pas de contour. Defaut 0." }
+      }
+    },
+    "comp_circle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Cercle décoratif (lv_obj carré + radius LV_RADIUS_CIRCLE). Diamètre via placement.size. Mêmes options de fond/contour que rect.",
+      "properties": {
+        "type": { "const": "circle" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN). Pilotable via /update." },
+        "fill": { "$ref": "#/$defs/hexColor", "description": "Couleur de fond. Absent = pas de fond (contour seul)." },
+        "border_color": { "$ref": "#/$defs/hexColor", "description": "Couleur du contour. Ignorée si border_width 0. Defaut #FFFFFF." },
+        "border_width": { "type": "integer", "minimum": 0, "description": "Épaisseur du contour en px. 0 = pas de contour. Defaut 0." }
+      }
+    },
+    "comp_line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Droite décorative (lv_line) horizontale ou verticale. Longueur = placement.width, épaisseur = placement.thickness. Le pointillé (dash) n'est rendu que sur les lignes H/V — toujours le cas ici.",
+      "properties": {
+        "type": { "const": "line" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (defaut true). false = cache (LV_OBJ_FLAG_HIDDEN). Pilotable via /update." },
+        "color": { "$ref": "#/$defs/hexColor", "description": "Couleur du trait (line_color). Defaut #FFFFFF." },
+        "orientation": { "enum": ["horizontal", "vertical"], "description": "Sens du séparateur. Defaut horizontal. (réutilise le parsing orientation de bar)" },
+        "dash": { "enum": ["solid", "dashed", "dotted"], "description": "Motif du trait (line_dash_width/gap). Defaut solid." },
+        "rounded": { "type": "boolean", "description": "Bouts arrondis (line_rounded). Defaut false." }
+      }
+    },
+    "comp_switch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Effecteur : interrupteur tactile (lv_switch). Écrit bind=on?1:0 à l'interaction (origine UI → arme les sinks) et reflète l'état on/off depuis le contexte. Taille via placement width/height (défaut 60×30).",
+      "properties": {
+        "type": { "const": "switch" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (défaut true). false = caché (LV_OBJ_FLAG_HIDDEN). Révélable via /update." },
+        "bind": { "$ref": "#/$defs/id", "description": "Var de contexte écrite au toggle (origine UI) et reflétée (état on/off)." }
+      }
+    },
+    "comp_button": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Effecteur : bouton tactile (lv_button + label). Au tap, écrit bind=value (origine UI → arme les sinks). Reflet radio : surbrillance si contexte == value. Taille via placement width/height (défaut 100×44). Texte blanc, police générique (font/font_family, défaut 20).",
+      "properties": {
+        "type": { "const": "button" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (défaut true). false = caché (LV_OBJ_FLAG_HIDDEN). Révélable via /update." },
+        "bind": { "$ref": "#/$defs/id", "description": "Var de contexte écrite au tap (origine UI)." },
+        "text": { "$ref": "#/$defs/display", "description": "Libellé du bouton (Latin-1). Pilotable via /update." },
+        "value": { "type": ["number", "string"], "description": "Valeur écrite dans bind au tap. Nombre → set numérique ; chaîne → set string (le type JSON décide, cf. set_is_num firmware). Absent ⇒ chaîne vide." },
+        "momentary": { "type": "boolean", "description": "Mode du bouton : false = set (écrit value, reflet radio) ; true = impulsion (value puis reset). Défaut false." }
+      }
+    },
+    "comp_slider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Effecteur : curseur linéaire (lv_slider). Écrit bind = valeur (quantifiée si step>0) au glissement (origine UI → arme les sinks). Place via width/height/anchor/dx/dy (défaut 200×16).",
+      "properties": {
+        "type": { "const": "slider" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (défaut true). false = caché (LV_OBJ_FLAG_HIDDEN). Révélable via /update." },
+        "bind": { "$ref": "#/$defs/id", "description": "Variable écrite au glissement (origine UI)." },
+        "min": { "type": "number", "description": "Borne basse (défaut 0)." },
+        "max": { "type": "number", "description": "Borne haute (défaut 100)." },
+        "step": { "type": "integer", "description": "Pas de quantification. <=0 = valeur brute (défaut 0)." },
+        "orientation": { "enum": ["horizontal", "vertical"], "description": "Sens du curseur (défaut horizontal)." },
+        "color": { "$ref": "#/$defs/hexColor", "description": "Couleur de l'indicateur (défaut #FFFFFF)." }
+      }
+    },
+    "comp_arc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Effecteur : cadran circulaire (lv_arc). Écrit bind = valeur (quantifiée si step>0) au tournoiement. Géométrie via placement radius/thickness/gap_deg/start_angle (comme le ring). Piste grise, indicateur coloré.",
+      "properties": {
+        "type": { "const": "arc" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (défaut true). false = caché (LV_OBJ_FLAG_HIDDEN). Révélable via /update." },
+        "bind": { "$ref": "#/$defs/id", "description": "Variable écrite au tournoiement (origine UI)." },
+        "min": { "type": "number", "description": "Borne basse (défaut 0)." },
+        "max": { "type": "number", "description": "Borne haute (défaut 100)." },
+        "step": { "type": "integer", "description": "Pas de quantification. <=0 = valeur brute (défaut 0)." },
+        "mode": { "enum": ["normal", "symmetrical", "reverse"], "description": "Sens de remplissage (défaut normal)." },
+        "rounded": { "type": "boolean", "description": "Extrémités arrondies (défaut true)." },
+        "color": { "$ref": "#/$defs/hexColor", "description": "Couleur de l'indicateur (défaut #FFFFFF)." }
+      }
+    },
+    "comp_roller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "options"],
+      "description": "Effecteur : molette de sélection (lv_roller). Écrit bind = index sélectionné (numérique) au défilement. Place via width/anchor/dx/dy (hauteur auto = rows lignes).",
+      "properties": {
+        "type": { "const": "roller" },
+        "visible": { "type": "boolean", "description": "Affiche le composant (défaut true). false = caché (LV_OBJ_FLAG_HIDDEN). Révélable via /update." },
+        "bind": { "$ref": "#/$defs/id", "description": "Variable écrite à la sélection (index numérique)." },
+        "options": { "type": "array", "items": { "$ref": "#/$defs/display" }, "minItems": 1, "description": "Libellés des options (une par ligne dans l'éditeur)." },
+        "rows": { "type": "integer", "minimum": 1, "maximum": 7, "description": "Rangées visibles (défaut 3, max MAX_ROLLER_ROWS)." }
+      }
+    },
+    "comp_stepper": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Effecteur : incrément +/- ; écrit bind = valeur (origine UI).",
+      "properties": {
+        "type": { "const": "stepper" },
+        "visible": { "type": "boolean" },
+        "bind": { "$ref": "#/$defs/id", "description": "Variable écrite (origine UI)." },
+        "min": { "type": "number" }, "max": { "type": "number" },
+        "step": { "type": "integer", "description": "Pas (défaut 1)." },
+        "unit": { "$ref": "#/$defs/display" },
+        "color": { "$ref": "#/$defs/hexColor" }
+      }
+    },
+    "comp_segmented": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "options"],
+      "description": "Effecteur : contrôle segmenté (choix exclusif) ; écrit bind = index sélectionné.",
+      "properties": {
+        "type": { "const": "segmented" },
+        "visible": { "type": "boolean" },
+        "bind": { "$ref": "#/$defs/id", "description": "Variable écrite (index)." },
+        "options": { "type": "array", "items": { "$ref": "#/$defs/display" }, "minItems": 2, "maxItems": 4 }
+      }
+    },
+    "comp_clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Affichage : horloge (heure du device via NTP). Aucun bind. mode analog|digital.",
+      "properties": {
+        "type": { "const": "clock" },
+        "visible": { "type": "boolean" },
+        "mode": { "enum": ["analog", "digital"], "description": "Cadran (analog) ou texte HH:MM (digital). Defaut analog." },
+        "show_seconds": { "type": "boolean", "description": "Affiche les secondes. Defaut false." },
+        "color": { "$ref": "#/$defs/hexColor" },
+        "font": { "$ref": "#/$defs/font" },
+        "font_family": { "$ref": "#/$defs/fontFamily" },
+        "bold": { "type": "boolean" },
+        "italic": { "type": "boolean" }
+      }
+    },
+    "ring_track": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bind": { "$ref": "#/$defs/id", "description": "Variable lue (pull/context) pour cette piste." },
+        "min": { "type": "number", "description": "Defaut 0." },
+        "max": { "type": "number", "description": "Defaut 100." },
+        "color": { "$ref": "#/$defs/hexColor" }
+      }
+    },
+    "comp_rings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Affichage : 1-3 anneaux concentriques. Push par ID : {\"id\":[v0,v1,v2]}. Chaque piste a un bind optionnel (pull).",
+      "properties": {
+        "type": { "const": "rings" },
+        "visible": { "type": "boolean" },
+        "tracks": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/ring_track" } }
+      }
+    },
+    "comp_qr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Affichage : QR code (ECC MEDIUM, comme lv_qrcode). text vide = URL device.",
+      "properties": {
+        "type": { "const": "qr" },
+        "visible": { "type": "boolean" },
+        "bind": { "$ref": "#/$defs/id", "description": "Variable (string) lue pour remplacer text." },
+        "text": { "$ref": "#/$defs/display", "description": "Texte encodé. Vide = URL du device." },
+        "color": { "$ref": "#/$defs/hexColor", "description": "Modules sombres (défaut #05070D)." }
+      }
+    },
+    "page": {
+      "type": "object",
+      "required": ["name", "place"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/id", "description": "Nom de page (cible de POST /page {\"name\":...})." },
+        "background": { "$ref": "#/$defs/hexColor", "description": "Couleur de fond de la page (optionnel ; herite du background global du layout si absent)." },
+        "background_image": { "$ref": "#/$defs/ascii", "description": "Cle d'asset image de fond (hash de contenu, hex). Bytes RGB565 360x360 uploades via POST /bgimage?key=. Absent = pas d'image (la couleur de fond s'applique)." },
+        "place": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/placement" }
+        }
+      }
+    },
+    "placement": {
+      "type": "object",
+      "required": ["ref"],
+      "additionalProperties": false,
+      "description": "Place un composant (par ref) sur une page, avec sa geometrie. led_ring et sound n'ont pas de geometrie.",
+      "properties": {
+        "ref": { "type": "string", "description": "id d'un composant declare dans components. Doit resoudre, sinon le firmware rejette le layout." },
+        "anchor": { "$ref": "#/$defs/anchor" },
+        "dx": { "type": "integer", "description": "Offset horizontal depuis l'ancrage (defaut 0)." },
+        "dy": { "type": "integer", "description": "Offset vertical depuis l'ancrage (defaut 0)." },
+        "width": { "type": "integer", "description": "Largeur (bar) ou longueur (line). Defaut 0." },
+        "height": { "type": "integer", "description": "Hauteur (bar). Defaut 0." },
+        "radius": { "type": "integer", "description": "Rayon (ring). Anneaux concentriques = meme centre, radius differents. Rayon de coin (rect, label). Defaut 0." },
+        "thickness": { "type": "integer", "description": "Epaisseur de bande (ring) ou epaisseur de trait (line). Defaut 16 (le designer emet 2 pour line)." },
+        "gap_deg": { "type": "integer", "description": "Angle d'ouverture (ring). Position determinee par start_angle. Defaut 70." },
+        "start_angle": { "type": "integer", "description": "Oriente l'ouverture : offset en degres, horaire, depuis le bas. 0=bas, 90=gauche, 180=haut, 270=droite. Defaut 0." },
+        "size": { "type": "integer", "minimum": 1, "maximum": 360, "description": "Diametre du voyant (led) ou du cercle (circle), en px. Defaut 24 (le designer emet 60 pour circle)." }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["url"],
+      "additionalProperties": false,
+      "description": "Une source de pull (1 source = 1 url). url requis (le firmware rejette une source sans url).",
+      "properties": {
+        "name": { "$ref": "#/$defs/display", "description": "Nom de la source (libelle ; apparait dans GET /status)." },
+        "url": { "type": "string", "description": "URL HTTP(S) a interroger." },
+        "interval_s": { "type": "integer", "minimum": 5, "description": "Periode de fetch en secondes. Defaut 60. Plancher impose 5 (CTX_MIN_INTERVAL_S)." },
+        "headers": {
+          "type": "object",
+          "description": "En-tetes HTTP. Une valeur \"$nom\" reference un secret du store write-only (resolu au fetch).",
+          "additionalProperties": { "type": "string" }
+        },
+        "vars": {
+          "type": "object",
+          "description": "Map nom_de_variable -> JSON Pointer (RFC 6901, ex. \"/main/temp\") extrait de la reponse.",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "sink": {
+      "type": "object",
+      "required": ["watch", "url"],
+      "additionalProperties": false,
+      "description": "Une sortie HTTP reactive (1 sink = 1 var observee -> 1 url). url et watch requis (le firmware rejette sinon).",
+      "properties": {
+        "name": { "$ref": "#/$defs/display", "description": "Libelle (apparait dans GET /status)." },
+        "watch": { "$ref": "#/$defs/id", "description": "Var de contexte observee ; son ecriture UI arme ce sink." },
+        "method": { "enum": ["POST", "PUT", "GET"], "description": "Methode HTTP. Defaut POST." },
+        "url": { "type": "string", "description": "URL HTTP(S) cible." },
+        "headers": {
+          "type": "object",
+          "description": "En-tetes HTTP. Une valeur \"$nom\" reference un secret (resolu au fire).",
+          "additionalProperties": { "type": "string" }
+        },
+        "debounce_ms": { "type": "integer", "minimum": 0, "description": "Coalesce les ecritures : tir debounce_ms apres la derniere modif. Defaut 0 (immediat). Slider/arc : ex. 300." },
+        "body": { "description": "Gabarit du corps (objet/valeur JSON). {{var}} substitue depuis le contexte (macro textuelle ; mettre des guillemets pour une string). Absent => {\"<watch>\": <valeur>}." }
+      }
+    }
+  }
+}
