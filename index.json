@@ -1,0 +1,440 @@
+[
+  {
+    "id": "dialboard/clock",
+    "file": "entries/dialboard/clock.dboard",
+    "name": "Horloge de bureau",
+    "author": "dialboard",
+    "description": "Horloge digitale minimaliste, marche tout de suite, zéro réglage.",
+    "domain": "time",
+    "tags": [
+      "clock",
+      "time"
+    ],
+    "requires": "",
+    "bytes": 1364,
+    "layout": {
+      "title": "Clock",
+      "background": "#0B0B0F",
+      "tz": "CET-1CEST,M3.5.0,M10.5.0",
+      "components": {
+        "deco": {
+          "type": "ring",
+          "color": "#FF9F40",
+          "min": 0,
+          "max": 60,
+          "rounded": true
+        },
+        "time": {
+          "type": "clock",
+          "mode": "digital",
+          "show_seconds": true,
+          "color": "#F5F5F7",
+          "font": 54,
+          "font_family": "jetbrains_mono"
+        },
+        "hello": {
+          "type": "label",
+          "text": "Hello",
+          "font": 18,
+          "color": "#9AA0AA"
+        }
+      },
+      "pages": [
+        {
+          "name": "Clock",
+          "place": [
+            {
+              "ref": "deco",
+              "radius": 170,
+              "thickness": 8,
+              "gap_deg": 0
+            },
+            {
+              "ref": "time",
+              "anchor": "CENTER",
+              "dy": -6
+            },
+            {
+              "ref": "hello",
+              "anchor": "CENTER",
+              "dy": 48
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "dialboard/crypto",
+    "file": "entries/dialboard/crypto.dboard",
+    "name": "Ticker crypto",
+    "author": "dialboard",
+    "description": "Prix et variation 24 h en direct via CoinGecko (sans clé API).",
+    "domain": "finance",
+    "tags": [
+      "crypto",
+      "finance"
+    ],
+    "requires": "Change la crypto (ids=) dans l'URL de la source. Le tier gratuit CoinGecko est rate-limité.",
+    "bytes": 1925,
+    "layout": {
+      "title": "Crypto",
+      "background": "#0B0B0F",
+      "components": {
+        "chg": {
+          "type": "ring",
+          "color": "#34D399",
+          "min": -10,
+          "max": 10,
+          "bind": "chg",
+          "thresholds": [
+            [
+              0,
+              "#EF4444"
+            ],
+            [
+              10,
+              "#34D399"
+            ]
+          ]
+        },
+        "price": {
+          "type": "readout",
+          "label": "BTC",
+          "unit": " $",
+          "font": 34,
+          "color": "#F5F5F7",
+          "bind": "price"
+        },
+        "chgv": {
+          "type": "readout",
+          "label": "24h",
+          "unit": " %",
+          "font": 16,
+          "color": "#9AA0AA",
+          "bind": "chg"
+        }
+      },
+      "pages": [
+        {
+          "name": "Crypto",
+          "place": [
+            {
+              "ref": "chg",
+              "radius": 150,
+              "thickness": 16,
+              "gap_deg": 90
+            },
+            {
+              "ref": "price",
+              "anchor": "CENTER",
+              "dy": -6
+            },
+            {
+              "ref": "chgv",
+              "anchor": "BOTTOM_MID",
+              "dy": -60
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "name": "CoinGecko",
+          "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true",
+          "interval_s": 120,
+          "vars": {
+            "price": "/bitcoin/usd",
+            "chg": "/bitcoin/usd_24h_change"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "dialboard/home-assistant",
+    "file": "entries/dialboard/home-assistant.dboard",
+    "name": "Home Assistant",
+    "author": "dialboard",
+    "description": "Lecture d'un capteur depuis ton instance Home Assistant.",
+    "domain": "home",
+    "tags": [
+      "home",
+      "homeassistant"
+    ],
+    "requires": "Renseigne ton URL/entité HA dans la source, puis POST /secrets ha_token=<jeton longue durée>.",
+    "bytes": 1679,
+    "layout": {
+      "title": "Home Assistant",
+      "background": "#0B0B0F",
+      "components": {
+        "ic": {
+          "type": "icon",
+          "symbol": "home",
+          "color": "#41BDF5",
+          "font": 40
+        },
+        "tval": {
+          "type": "readout",
+          "label": "",
+          "unit": " °C",
+          "font": 40,
+          "color": "#F5F5F7",
+          "bind": "temp"
+        },
+        "cap": {
+          "type": "label",
+          "text": "Living room",
+          "font": 16,
+          "color": "#9AA0AA"
+        }
+      },
+      "pages": [
+        {
+          "name": "Home",
+          "place": [
+            {
+              "ref": "ic",
+              "anchor": "CENTER",
+              "dy": -70
+            },
+            {
+              "ref": "tval",
+              "anchor": "CENTER",
+              "dy": 0
+            },
+            {
+              "ref": "cap",
+              "anchor": "CENTER",
+              "dy": 46
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "name": "Home Assistant (edit me)",
+          "url": "http://homeassistant.local:8123/api/states/sensor.living_room_temperature",
+          "interval_s": 30,
+          "headers": {
+            "Authorization": "$ha_token"
+          },
+          "vars": {
+            "temp": "/state"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "dialboard/server",
+    "file": "entries/dialboard/server.dboard",
+    "name": "Moniteur serveur",
+    "author": "dialboard",
+    "description": "Jauges CPU / RAM / uptime, à pointer sur ton endpoint JSON.",
+    "domain": "system",
+    "tags": [
+      "server",
+      "system"
+    ],
+    "requires": "Édite l'URL de la source vers ton endpoint JSON renvoyant {cpu, ram, uptime}.",
+    "bytes": 2212,
+    "layout": {
+      "title": "Server",
+      "background": "#0B0F0B",
+      "components": {
+        "cpu": {
+          "type": "meter",
+          "color": "#34D399",
+          "min": 0,
+          "max": 100,
+          "bind": "cpu",
+          "thresholds": [
+            [
+              70,
+              "#34D399"
+            ],
+            [
+              90,
+              "#F59E0B"
+            ],
+            [
+              100,
+              "#EF4444"
+            ]
+          ]
+        },
+        "cpul": {
+          "type": "readout",
+          "label": "CPU",
+          "unit": " %",
+          "font": 18,
+          "color": "#F5F5F7",
+          "bind": "cpu"
+        },
+        "ram": {
+          "type": "bar",
+          "label": "RAM",
+          "min": 0,
+          "max": 100,
+          "color": "#A78BFA",
+          "bind": "ram"
+        },
+        "up": {
+          "type": "readout",
+          "label": "Uptime",
+          "unit": " h",
+          "font": 14,
+          "color": "#9AA0AA",
+          "bind": "uptime"
+        }
+      },
+      "pages": [
+        {
+          "name": "Server",
+          "place": [
+            {
+              "ref": "cpu",
+              "anchor": "CENTER",
+              "dy": -30
+            },
+            {
+              "ref": "cpul",
+              "anchor": "CENTER",
+              "dy": 60
+            },
+            {
+              "ref": "ram",
+              "anchor": "BOTTOM_MID",
+              "dy": -50,
+              "width": 220,
+              "height": 16
+            },
+            {
+              "ref": "up",
+              "anchor": "BOTTOM_MID",
+              "dy": -20
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "name": "My server (edit me)",
+          "url": "http://192.168.1.10:9000/metrics.json",
+          "interval_s": 10,
+          "vars": {
+            "cpu": "/cpu",
+            "ram": "/ram",
+            "uptime": "/uptime"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "dialboard/weather",
+    "file": "entries/dialboard/weather.dboard",
+    "name": "Météo",
+    "author": "dialboard",
+    "description": "Température, vent et humidité en direct via open-meteo (sans clé API).",
+    "domain": "weather",
+    "tags": [
+      "weather",
+      "meteo"
+    ],
+    "requires": "Renseigne ta latitude/longitude dans l'URL de la source (panneau Sources).",
+    "bytes": 2341,
+    "layout": {
+      "title": "Weather",
+      "background": "#0B1220",
+      "components": {
+        "arc": {
+          "type": "ring",
+          "color": "#38BDF8",
+          "min": -10,
+          "max": 40,
+          "bind": "temp",
+          "thresholds": [
+            [
+              0,
+              "#60A5FA"
+            ],
+            [
+              25,
+              "#34D399"
+            ],
+            [
+              40,
+              "#F59E0B"
+            ]
+          ]
+        },
+        "tval": {
+          "type": "readout",
+          "label": "",
+          "unit": "°C",
+          "font": 40,
+          "color": "#F5F5F7",
+          "bind": "temp"
+        },
+        "wind": {
+          "type": "readout",
+          "label": "Wind",
+          "unit": " km/h",
+          "font": 16,
+          "color": "#9AA0AA",
+          "bind": "wind"
+        },
+        "hum": {
+          "type": "readout",
+          "label": "Hum",
+          "unit": " %",
+          "font": 16,
+          "color": "#9AA0AA",
+          "bind": "hum"
+        }
+      },
+      "pages": [
+        {
+          "name": "Weather",
+          "place": [
+            {
+              "ref": "arc",
+              "radius": 150,
+              "thickness": 18,
+              "gap_deg": 90
+            },
+            {
+              "ref": "tval",
+              "anchor": "CENTER",
+              "dy": -6
+            },
+            {
+              "ref": "wind",
+              "anchor": "BOTTOM_MID",
+              "dy": -70
+            },
+            {
+              "ref": "hum",
+              "anchor": "BOTTOM_MID",
+              "dy": -44
+            }
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "name": "Open-Meteo",
+          "url": "https://api.open-meteo.com/v1/forecast?latitude=48.85&longitude=2.35&current=temperature_2m,wind_speed_10m,relative_humidity_2m",
+          "interval_s": 900,
+          "vars": {
+            "temp": "/current/temperature_2m",
+            "wind": "/current/wind_speed_10m",
+            "hum": "/current/relative_humidity_2m"
+          }
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,92 @@
+{
+  "version": 2,
+  "meta": {
+    "name": "Ticker crypto",
+    "author": "dialboard",
+    "description": "Prix et variation 24 h en direct via CoinGecko (sans clé API).",
+    "domain": "finance",
+    "tags": [
+      "crypto",
+      "finance"
+    ],
+    "requires": "Change la crypto (ids=) dans l'URL de la source. Le tier gratuit CoinGecko est rate-limité."
+  },
+  "layout": {
+    "title": "Crypto",
+    "background": "#0B0B0F",
+    "components": {
+      "chg": {
+        "type": "ring",
+        "color": "#34D399",
+        "min": -10,
+        "max": 10,
+        "bind": "chg",
+        "thresholds": [
+          [
+            0,
+            "#EF4444"
+          ],
+          [
+            10,
+            "#34D399"
+          ]
+        ]
+      },
+      "price": {
+        "type": "readout",
+        "label": "BTC",
+        "unit": " $",
+        "font": 34,
+        "color": "#F5F5F7",
+        "bind": "price"
+      },
+      "chgv": {
+        "type": "readout",
+        "label": "24h",
+        "unit": " %",
+        "font": 16,
+        "color": "#9AA0AA",
+        "bind": "chg"
+      }
+    },
+    "pages": [
+      {
+        "name": "Crypto",
+        "place": [
+          {
+            "ref": "chg",
+            "radius": 150,
+            "thickness": 16,
+            "gap_deg": 90
+          },
+          {
+            "ref": "price",
+            "anchor": "CENTER",
+            "dy": -6
+          },
+          {
+            "ref": "chgv",
+            "anchor": "BOTTOM_MID",
+            "dy": -60
+          }
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "name": "CoinGecko",
+        "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true",
+        "interval_s": 120,
+        "vars": {
+          "price": "/bitcoin/usd",
+          "chg": "/bitcoin/usd_24h_change"
+        }
+      }
+    ]
+  },
+  "assets": {
+    "bg": {},
+    "image": {},
+    "aimg": {}
+  }
+}
